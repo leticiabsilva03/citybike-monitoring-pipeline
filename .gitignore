@@ -172,3 +172,21 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# VS Code
+.vscode/
+# Python
+__pycache__/
+*.py[cod]
+# Docker Compose overrides
+docker-compose.override.yml
+# Local data
+minio-data/
+pg-data/
+dags/*.pyc
+# Environment vars
+.env
+
+# Airflow execution logs
+logs/
+
