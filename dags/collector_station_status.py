@@ -9,7 +9,7 @@ import yaml
 import os
 
 # == Carrega pipeline_config apenas do config.yaml ==
-project_root = os.path.dirname(os.path.dirname(__file__))  
+project_root = os.path.dirname(os.path.dirname(__file__))
 with open(os.path.join(project_root, "config.yaml")) as f:
     pipeline_config = yaml.safe_load(f)
 
@@ -27,6 +27,7 @@ default_args = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dag(
     dag_id="bronze",
     default_args=default_args,
@@ -39,7 +40,7 @@ logger = logging.getLogger(__name__)
 - Validação inline de schema
 - Particionamento date-based
 - Idempotência no MinIO
-"""
+""",
 )
 def bronze_pipeline():
     @task
@@ -56,6 +57,7 @@ def bronze_pipeline():
     @task
     def validar_dados(payload: dict):
         from great_expectations.dataset import PandasDataset
+
         df = payload["data"]["network"]["stations"]
         batch = PandasDataset({"stations": df})
         batch.expect_table_row_count_to_be_between(min_value=1, max_value=None)
@@ -73,14 +75,16 @@ def bronze_pipeline():
             minio_conf["host"],
             access_key=minio_conf["access_key"],
             secret_key=minio_conf["secret_key"],
-            secure=False
+            secure=False,
         )
         data = payload["data"]
         fonte = payload["url"]
         ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         now = datetime.now(timezone.utc)
         prefix_tpl = pipeline_config["bronze"]["prefix"]
-        prefix = prefix_tpl.format(year=now.year, month=f"{now.month:02d}", day=f"{now.day:02d}")
+        prefix = prefix_tpl.format(
+            year=now.year, month=f"{now.month:02d}", day=f"{now.day:02d}"
+        )
         path = f"{prefix}/{ts}.json"
 
         record = {"ingestao": ts, "fonte": fonte, "dados": data}
@@ -96,12 +100,13 @@ def bronze_pipeline():
                 object_name=path,
                 data=BytesIO(content),
                 length=len(content),
-                content_type="application/json"
+                content_type="application/json",
             )
             logger.info("Upload concluído: %s", path)
 
     dados = obter_dados_api()
     validados = validar_dados(dados)
     salvar_no_minio(validados)
+
 
 dag = bronze_pipeline()

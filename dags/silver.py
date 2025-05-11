@@ -26,6 +26,7 @@ default_args = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dag(
     dag_id="silver",
     default_args=default_args,
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 - Processa e valida esquema e tipos via Great Expectations
 - Normaliza JSON para tabular
 - Salva CSV particionado no bucket Silver
-"""
+""",
 )
 def silver_pipeline():
     @task
@@ -48,12 +49,14 @@ def silver_pipeline():
             conf["host"],
             access_key=conf["access_key"],
             secret_key=conf["secret_key"],
-            secure=False
+            secure=False,
         )
         bucket = pipeline_config["bronze"]["bucket"]
-        prefix = pipeline_config["bronze"]["prefix"].split("{year}")[0].rstrip('/')
+        prefix = pipeline_config["bronze"]["prefix"].split("{year}")[0].rstrip("/")
         objetos = client.list_objects(bucket, prefix=prefix, recursive=True)
-        arquivos = [obj.object_name for obj in objetos if obj.object_name.endswith('.json')]
+        arquivos = [
+            obj.object_name for obj in objetos if obj.object_name.endswith(".json")
+        ]
         logger.info(f"Arquivos encontrados no Bronze: {arquivos}")
         return arquivos
 
@@ -64,14 +67,16 @@ def silver_pipeline():
             conf["host"],
             access_key=conf["access_key"],
             secret_key=conf["secret_key"],
-            secure=False
+            secure=False,
         )
         silver_bucket = pipeline_config["silver"]["bucket"]
         silver_prefix = pipeline_config["silver"]["prefix"]
 
         for arquivo in arquivos:
             logger.info(f"Lendo JSON do Bronze: {arquivo}")
-            response = client.get_object(bucket_name=pipeline_config["bronze"]["bucket"], object_name=arquivo)
+            response = client.get_object(
+                bucket_name=pipeline_config["bronze"]["bucket"], object_name=arquivo
+            )
             payload = json.load(response)
 
             df = pd.json_normalize(payload["dados"]["network"]["stations"])
@@ -80,6 +85,7 @@ def silver_pipeline():
             dt = datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
 
             from great_expectations.dataset import PandasDataset
+
             gedf = PandasDataset(df)
             gedf.expect_table_row_count_to_be_between(min_value=1, max_value=None)
             for col in ["id", "name", "latitude", "longitude"]:
@@ -93,7 +99,9 @@ def silver_pipeline():
                 logger.error(f"Validação falhou para {arquivo}: {res}")
                 raise ValueError("Falha na validação dos dados Silver.")
 
-            prefix = silver_prefix.format(year=dt.year, month=f"{dt.month:02d}", day=f"{dt.day:02d}")
+            prefix = silver_prefix.format(
+                year=dt.year, month=f"{dt.month:02d}", day=f"{dt.day:02d}"
+            )
             csv_path = f"{prefix}/{ts}.csv"
             buf = BytesIO()
             df.to_csv(buf, index=False)
@@ -104,11 +112,12 @@ def silver_pipeline():
                 object_name=csv_path,
                 data=buf,
                 length=buf.getbuffer().nbytes,
-                content_type="text/csv"
+                content_type="text/csv",
             )
             logger.info(f"CSV salvo no Silver: {silver_bucket}/{csv_path}")
 
     arquivos = listar_arquivos_bronze()
     processar_e_salvar(arquivos)
+
 
 dag = silver_pipeline()
