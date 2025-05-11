@@ -1,0 +1,10 @@
+minio:
+  host: "minio:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin123"
+bronze:
+  bucket: "bronze"
+  prefix: "stations/year={year}/month={month}/day={day}"
+silver:
+  bucket: "silver"
+  prefix: "stations/year={year}/month={month}/day={day}"

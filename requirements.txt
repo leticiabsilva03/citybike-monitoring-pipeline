@@ -1,0 +1,44 @@
+# Dependências para o pipeline CityBike Bronze e CI/CD
+
+# Airflow core
+
+apache-airflow>=2.5.0
+
+# Provider HTTP, para operadores HTTP (caso use Airflow HTTP hooks)
+
+apache-airflow-providers-http>=2.1.0
+
+# Cliente MinIO (para upload no bucket Bronze)
+
+minio>=7.1.0
+
+# Requisições HTTP
+
+requests>=2.28.0
+
+# Validação de esquema JSON
+
+jsonschema>=4.17.0
+
+# (Opcional) Great Expectations, para validações mais avançadas
+
+great-expectations>=0.16.0
+
+# Ferramentas de lint e formatação
+
+types-black>=22.3.0
+black>=22.3.0
+flake8>=4.0.0
+mypy>=0.991
+
+# Testes\pytest>=7.0.0
+
+moto>=4.0.0
+
+# Dependências extras para testes com Airflow
+
+apache-airflow\[postgres,celery]>=2.5.0
+
+# (Opcional) AWS SDK para Python, caso use boto3 em outras tarefas
+
+boto3>=1.26.0
