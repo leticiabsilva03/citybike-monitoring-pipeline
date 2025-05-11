@@ -1,61 +1,56 @@
-# dags/silver.py
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime
+from minio import Minio
+import json
+import pandas as pd
+from io import BytesIO
 
-import minio  # type: ignore
-import yaml  # type: ignore
-import pandas as pd  # type: ignore
+def transform_stations():
+    client = Minio(
+        "minio:9000",
+        access_key="minioadmin",
+        secret_key="minioadmin123",
+        secure=False
+    )
 
-from airflow.decorators import dag, task  # type: ignore
-from datetime import datetime, timedelta
+    # Lista arquivos mais recentes do bucket bronze
+    objects = client.list_objects("bronze", prefix="stations/", recursive=True)
+    latest_obj = max(objects, key=lambda obj: obj.last_modified)
 
-DEFAULT_ARGS = {
-    "owner": "airflow",
-    "depends_on_past": False,
-    "email": "leticiabscoding@gmail.com",
-    "email_on_failure": False,
-    "email_on_retry": False,
-    "retries": 1,
-    "retry_delay": timedelta(minutes=5),
-}
+    # Baixa o conteúdo do JSON bruto
+    response = client.get_object("bronze", latest_obj.object_name)
+    raw_data = json.load(response)
 
-START_DATE = datetime(2025, 1, 1)
+    # Transforma os dados em DataFrame
+    stations = raw_data["network"]["stations"]
+    df = pd.DataFrame(stations)
 
+    # Aqui você pode filtrar/normalizar dados, se necessário
+    # Exemplo: selecionando apenas algumas colunas
+    df = df[["id", "name", "latitude", "longitude", "empty_slots", "free_bikes", "timestamp"]]
 
-@dag(
-    dag_id="silver_dag",
-    default_args=DEFAULT_ARGS,
-    start_date=datetime(2025, 1, 1),
-    schedule="@hourly",
-    catchup=False,
-    tags=["etl", "silver"],
-)
-def silver():
-    @task()
-    def extract_bronze() -> pd.DataFrame:
-        client = minio.Minio("play.min.io", access_key="...", secret_key="...")
-        obj = client.get_object("bronze-bucket", "bronze.parquet")
-        df = pd.read_parquet(obj)
-        return df
+    # Salva como Parquet (ou CSV) no bucket silver
+    buffer = BytesIO()
+    df.to_parquet(buffer, index=False)
+    buffer.seek(0)
 
-    @task()
-    def transform(df: pd.DataFrame) -> pd.DataFrame:
-        _ = yaml.safe_load(open("transform-config.yml", "r"))
-        # ...aplica transformações com cfg...
-        return df
+    silver_path = latest_obj.object_name.replace("stations/", "").replace(".json", ".parquet")
+    client.put_object(
+        bucket_name="silver",
+        object_name=f"stations/{silver_path}",
+        data=buffer,
+        length=buffer.getbuffer().nbytes,
+        content_type="application/octet-stream"
+    )
 
-    @task(multiple_outputs=True)
-    def load_silver(df: pd.DataFrame) -> dict:
-        client = minio.Minio("play.min.io", access_key="...", secret_key="...")
-        data = df.to_parquet()
-        client.put_object(
-            bucket_name="silver-bucket",
-            object_name="silver.parquet",
-            data=data,
-            length=len(data),
-            content_type="application/octet-stream",
-        )
-        return {"bucket": "silver-bucket", "key": "silver.parquet"}
-
-    return extract_bronze() >> transform() >> load_silver()
-
-
-silver_dag = silver()
+with DAG(
+    "silver",
+    start_date=datetime(2025,5,4),
+    schedule_interval="*/5 * * * *",
+    catchup=False
+) as dag:
+    transform = PythonOperator(
+        task_id="transform_stations",
+        python_callable=transform_stations
+    )
