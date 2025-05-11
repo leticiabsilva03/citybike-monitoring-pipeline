@@ -1,123 +1,65 @@
-from airflow.decorators import dag, task
-from datetime import datetime, timedelta, timezone
-from minio import Minio
-from io import BytesIO
-import json
-import yaml
-import os
-import logging
-import pandas as pd
+# dags/silver.py
 
-# == Carrega pipeline_config apenas do config.yaml ==
-project_root = os.path.dirname(os.path.dirname(__file__))
-with open(os.path.join(project_root, "config.yaml")) as f:
-    pipeline_config = yaml.safe_load(f)
+import minio  # type: ignore
+import yaml  # type: ignore
+import pandas as pd  # type: ignore
 
-# == default_args ==
-default_args = {
-    "owner": "leticia",
+from airflow.decorators import dag, task  # type: ignore
+from datetime import datetime, timedelta
+
+DEFAULT_ARGS = {
+    "owner": "airflow",
     "depends_on_past": False,
-    "retries": 2,
+    "email": "leticiabscoding@gmail.com",
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 1,
     "retry_delay": timedelta(minutes=5),
-    "email_on_failure": True,
-    "email": ["leticiabscoding@gmail.com"],
 }
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+START_DATE = datetime(2025, 1, 1)
 
 
 @dag(
-    dag_id="silver",
-    default_args=default_args,
-    start_date=datetime(2025, 5, 10),
-    schedule_interval="@hourly",
+    dag_id="job_silver",
+    default_args=DEFAULT_ARGS,
+    start_date=START_DATE,
+    schedule_interval="@daily",
     catchup=False,
     doc_md="""
-### DAG Silver CityBike
-- Lista arquivos JSON na camada Bronze
-- Processa e valida esquema e tipos via Great Expectations
-- Normaliza JSON para tabular
-- Salva CSV particionado no bucket Silver
+#### Pipeline SILVER
+- Transforma bronze em silver
+- Escrita em buckets MinIO
 """,
 )
-def silver_pipeline():
-    @task
-    def listar_arquivos_bronze():
-        conf = pipeline_config["minio"]
-        client = Minio(
-            conf["host"],
-            access_key=conf["access_key"],
-            secret_key=conf["secret_key"],
-            secure=False,
+def silver():
+    @task()
+    def extract_bronze() -> pd.DataFrame:
+        client = minio.Minio("play.min.io", access_key="...", secret_key="...")
+        obj = client.get_object("bronze-bucket", "bronze.parquet")
+        df = pd.read_parquet(obj)
+        return df
+
+    @task()
+    def transform(df: pd.DataFrame) -> pd.DataFrame:
+        _ = yaml.safe_load(open("transform-config.yml", "r"))
+        # ...aplica transformações com cfg...
+        return df
+
+    @task(multiple_outputs=True)
+    def load_silver(df: pd.DataFrame) -> dict:
+        client = minio.Minio("play.min.io", access_key="...", secret_key="...")
+        data = df.to_parquet()
+        client.put_object(
+            bucket_name="silver-bucket",
+            object_name="silver.parquet",
+            data=data,
+            length=len(data),
+            content_type="application/octet-stream",
         )
-        bucket = pipeline_config["bronze"]["bucket"]
-        prefix = pipeline_config["bronze"]["prefix"].split("{year}")[0].rstrip("/")
-        objetos = client.list_objects(bucket, prefix=prefix, recursive=True)
-        arquivos = [
-            obj.object_name for obj in objetos if obj.object_name.endswith(".json")
-        ]
-        logger.info(f"Arquivos encontrados no Bronze: {arquivos}")
-        return arquivos
+        return {"bucket": "silver-bucket", "key": "silver.parquet"}
 
-    @task
-    def processar_e_salvar(arquivos: list):
-        conf = pipeline_config["minio"]
-        client = Minio(
-            conf["host"],
-            access_key=conf["access_key"],
-            secret_key=conf["secret_key"],
-            secure=False,
-        )
-        silver_bucket = pipeline_config["silver"]["bucket"]
-        silver_prefix = pipeline_config["silver"]["prefix"]
-
-        for arquivo in arquivos:
-            logger.info(f"Lendo JSON do Bronze: {arquivo}")
-            response = client.get_object(
-                bucket_name=pipeline_config["bronze"]["bucket"], object_name=arquivo
-            )
-            payload = json.load(response)
-
-            df = pd.json_normalize(payload["dados"]["network"]["stations"])
-
-            ts = payload.get("ingestao")
-            dt = datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
-
-            from great_expectations.dataset import PandasDataset
-
-            gedf = PandasDataset(df)
-            gedf.expect_table_row_count_to_be_between(min_value=1, max_value=None)
-            for col in ["id", "name", "latitude", "longitude"]:
-                gedf.expect_column_to_exist(col)
-            gedf.expect_column_values_to_not_be_null("id")
-            gedf.expect_column_values_to_be_of_type("latitude", "float")
-            gedf.expect_column_values_to_be_between("latitude", -90, 90)
-            gedf.expect_column_values_to_be_between("longitude", -180, 180)
-            res = gedf.validate()
-            if not res.success:
-                logger.error(f"Validação falhou para {arquivo}: {res}")
-                raise ValueError("Falha na validação dos dados Silver.")
-
-            prefix = silver_prefix.format(
-                year=dt.year, month=f"{dt.month:02d}", day=f"{dt.day:02d}"
-            )
-            csv_path = f"{prefix}/{ts}.csv"
-            buf = BytesIO()
-            df.to_csv(buf, index=False)
-            buf.seek(0)
-
-            client.put_object(
-                bucket_name=silver_bucket,
-                object_name=csv_path,
-                data=buf,
-                length=buf.getbuffer().nbytes,
-                content_type="text/csv",
-            )
-            logger.info(f"CSV salvo no Silver: {silver_bucket}/{csv_path}")
-
-    arquivos = listar_arquivos_bronze()
-    processar_e_salvar(arquivos)
+    return extract_bronze() >> transform() >> load_silver()
 
 
-dag = silver_pipeline()
+silver_dag = silver()
