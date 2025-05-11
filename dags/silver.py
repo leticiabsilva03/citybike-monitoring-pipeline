@@ -24,7 +24,7 @@ START_DATE = datetime(2025, 1, 1)
     dag_id="silver_dag",
     default_args=DEFAULT_ARGS,
     start_date=datetime(2025, 1, 1),
-    schedule = "@hourly",
+    schedule="@hourly",
     catchup=False,
     tags=["etl", "silver"],
 )
