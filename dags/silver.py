@@ -52,10 +52,12 @@ def silver_pipeline():
             secure=False,
         )
         bucket = pipeline_config["bronze"]["bucket"]
-        prefix = pipeline_config["bronze"]["prefix"].split("{year}")[0].rstrip("/")
+        prefix = pipeline_config["bronze"]["prefix"].split(
+            "{year}")[0].rstrip("/")
         objetos = client.list_objects(bucket, prefix=prefix, recursive=True)
         arquivos = [
-            obj.object_name for obj in objetos if obj.object_name.endswith(".json")
+            obj.object_name for obj in objetos
+            if obj.object_name.endswith(".json")
         ]
         logger.info(f"Arquivos encontrados no Bronze: {arquivos}")
         return arquivos
@@ -75,19 +77,24 @@ def silver_pipeline():
         for arquivo in arquivos:
             logger.info(f"Lendo JSON do Bronze: {arquivo}")
             response = client.get_object(
-                bucket_name=pipeline_config["bronze"]["bucket"], object_name=arquivo
+                bucket_name=pipeline_config["bronze"]["bucket"],
+                object_name=arquivo
             )
             payload = json.load(response)
 
             df = pd.json_normalize(payload["dados"]["network"]["stations"])
 
             ts = payload.get("ingestao")
-            dt = datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(ts, "%Y%m%dT%H%M%SZ").replace(
+                tzinfo=timezone.utc
+                )
 
             from great_expectations.dataset import PandasDataset
 
             gedf = PandasDataset(df)
-            gedf.expect_table_row_count_to_be_between(min_value=1, max_value=None)
+            gedf.expect_table_row_count_to_be_between(
+                min_value=1, max_value=None
+                )
             for col in ["id", "name", "latitude", "longitude"]:
                 gedf.expect_column_to_exist(col)
             gedf.expect_column_values_to_not_be_null("id")
