@@ -21,12 +21,12 @@ START_DATE = datetime(2025, 1, 1)
 
 
 @dag(
-    dag_id="silver_dag",  # positional allowed for dag_id
-    default_args=DEFAULT_ARGS,  # keyword argument
-    start_date=START_DATE,  # keyword argument
-    schedule_interval="@hourly",  # keyword argument
+    dag_id="silver_dag",
+    default_args=DEFAULT_ARGS,
+    start_date=datetime(2025, 1, 1),
+    schedule_interval="@hourly",
     catchup=False,
-    tags=["silver"],
+    tags=["etl", "silver"],
 )
 def silver():
     @task()

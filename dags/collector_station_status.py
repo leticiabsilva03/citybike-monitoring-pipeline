@@ -23,10 +23,10 @@ START_DATE = datetime(2025, 1, 1)
 @dag(
     dag_id="collector_station_status",
     default_args=DEFAULT_ARGS,
-    start_date=START_DATE,
+    start_date=datetime(2025, 1, 1),
     schedule_interval="@hourly",
     catchup=False,
-    tags=["citybike"],
+    tags=["collector", "status"],
 )
 def collector_station_status():
     @task()
