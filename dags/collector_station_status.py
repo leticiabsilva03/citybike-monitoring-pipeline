@@ -26,12 +26,7 @@ START_DATE = datetime(2025, 1, 1)
     start_date=START_DATE,
     schedule_interval="@hourly",
     catchup=False,
-    doc_md="""
-#### Collector Station Status
-- Coleta info de estações via API
-- Valida com Great Expectations
-- Persiste JSON no MinIO
-""",
+    tags=["citybike"],
 )
 def collector_station_status():
     @task()

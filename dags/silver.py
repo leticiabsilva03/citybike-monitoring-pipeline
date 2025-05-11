@@ -21,16 +21,12 @@ START_DATE = datetime(2025, 1, 1)
 
 
 @dag(
-    dag_id="job_silver",
-    default_args=DEFAULT_ARGS,
-    start_date=START_DATE,
-    schedule_interval="@daily",
+    dag_id="silver_dag",  # positional allowed for dag_id
+    default_args=DEFAULT_ARGS,  # keyword argument
+    start_date=START_DATE,  # keyword argument
+    schedule_interval="@hourly",  # keyword argument
     catchup=False,
-    doc_md="""
-#### Pipeline SILVER
-- Transforma bronze em silver
-- Escrita em buckets MinIO
-""",
+    tags=["silver"],
 )
 def silver():
     @task()
