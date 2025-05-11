@@ -94,8 +94,7 @@ def bronze_pipeline():
             client.stat_object(pipeline_config["bronze"]["bucket"], path)
             logger.info("Arquivo já existe: %s", path)
         except Exception:
-            logger.info("Upload: %s/%s", pipeline_config["bronze"]["bucket"],
-                        path)
+            logger.info("Upload: %s/%s", pipeline_config["bronze"]["bucket"], path)
             client.put_object(
                 bucket_name=pipeline_config["bronze"]["bucket"],
                 object_name=path,
