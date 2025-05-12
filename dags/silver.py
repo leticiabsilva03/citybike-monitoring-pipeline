@@ -25,12 +25,9 @@ def transform_stations():
     # Transforma os dados em DataFrame
     stations = raw_data["network"]["stations"]
     df = pd.DataFrame(stations)
-
-    # Aqui você pode filtrar/normalizar dados, se necessário
-    # Exemplo: selecionando apenas algumas colunas
     df = df[["id", "name", "latitude", "longitude", "empty_slots", "free_bikes", "timestamp"]]
 
-    # Salva como Parquet (ou CSV) no bucket silver
+    # Salva como Parquet no bucket silver
     buffer = BytesIO()
     df.to_parquet(buffer, index=False)
     buffer.seek(0)
